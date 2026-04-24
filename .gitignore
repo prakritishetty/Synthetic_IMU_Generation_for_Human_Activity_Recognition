@@ -3,7 +3,7 @@ __pycache__/
 *.pt
 *.h5
 *.tar.gz
-raw_data/
+processed_wisdm/
 checkpoints/
 myvenv/
 *.npz
