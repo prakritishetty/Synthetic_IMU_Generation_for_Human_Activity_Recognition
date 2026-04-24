@@ -1,0 +1,53 @@
+_wandb:
+    value:
+        cli_version: 0.26.1
+        e:
+            3jfwhl4a1xmnfu4sojsotshsf3rw9amp:
+                args:
+                    - --epochs
+                    - "30"
+                    - --wandb
+                codePath: src\train_diffusion.py
+                codePathLocal: src\train_diffusion.py
+                cpu_count: 4
+                cpu_count_logical: 8
+                cudaVersion: "13.0"
+                disk:
+                    /:
+                        total: "314571747328"
+                        used: "264804352000"
+                email: prakritishetty02@gmail.com
+                executable: E:\UMass\SPRING 2026\690R\Downloads\CS690TR\myvenv\Scripts\python.exe
+                git:
+                    commit: 509eb7fb6047f20de8a49bcccffaf6a9b2f2224e
+                    remote: https://github.com/prakritishetty/Synthetic_IMU_Generation_for_Human_Activity_Recognition.git
+                gpu: NVIDIA GeForce MX230
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Pascal
+                      cudaCores: 256
+                      memoryTotal: "2147483648"
+                      name: NVIDIA GeForce MX230
+                      uuid: GPU-3aabae6c-0790-6054-e964-1c669c5498ac
+                host: DESKTOP-FPN6EV8
+                memory:
+                    total: "8339001344"
+                os: Windows-10-10.0.19045-SP0
+                program: E:\UMass\SPRING 2026\690R\Downloads\CS690TR\src\train_diffusion.py
+                python: CPython 3.13.9
+                root: E:\UMass\SPRING 2026\690R\Downloads\CS690TR
+                startedAt: "2026-04-24T16:27:19.842352Z"
+                writerId: 3jfwhl4a1xmnfu4sojsotshsf3rw9amp
+        m: []
+        python_version: 3.13.9
+        t:
+            "1":
+                - 1
+            "2":
+                - 1
+            "4": 3.13.9
+            "5": 0.26.1
+            "8":
+                - 3
+            "12": 0.26.1
+            "13": windows-amd64

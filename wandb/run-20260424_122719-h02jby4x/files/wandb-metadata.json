@@ -1,0 +1,45 @@
+{
+  "os":  "Windows-10-10.0.19045-SP0",
+  "python":  "CPython 3.13.9",
+  "startedAt":  "2026-04-24T16:27:19.842352Z",
+  "args":  [
+    "--epochs",
+    "30",
+    "--wandb"
+  ],
+  "program":  "E:\\UMass\\SPRING 2026\\690R\\Downloads\\CS690TR\\src\\train_diffusion.py",
+  "codePath":  "src\\train_diffusion.py",
+  "codePathLocal":  "src\\train_diffusion.py",
+  "git":  {
+    "remote":  "https://github.com/prakritishetty/Synthetic_IMU_Generation_for_Human_Activity_Recognition.git",
+    "commit":  "509eb7fb6047f20de8a49bcccffaf6a9b2f2224e"
+  },
+  "email":  "prakritishetty02@gmail.com",
+  "root":  "E:\\UMass\\SPRING 2026\\690R\\Downloads\\CS690TR",
+  "host":  "DESKTOP-FPN6EV8",
+  "executable":  "E:\\UMass\\SPRING 2026\\690R\\Downloads\\CS690TR\\myvenv\\Scripts\\python.exe",
+  "cpu_count":  4,
+  "cpu_count_logical":  8,
+  "gpu":  "NVIDIA GeForce MX230",
+  "gpu_count":  1,
+  "disk":  {
+    "/":  {
+      "total":  "314571747328",
+      "used":  "264804352000"
+    }
+  },
+  "memory":  {
+    "total":  "8339001344"
+  },
+  "gpu_nvidia":  [
+    {
+      "name":  "NVIDIA GeForce MX230",
+      "memoryTotal":  "2147483648",
+      "cudaCores":  256,
+      "architecture":  "Pascal",
+      "uuid":  "GPU-3aabae6c-0790-6054-e964-1c669c5498ac"
+    }
+  ],
+  "cudaVersion":  "13.0",
+  "writerId":  "3jfwhl4a1xmnfu4sojsotshsf3rw9amp"
+}

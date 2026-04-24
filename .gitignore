@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pt
+*.h5
+*.tar.gz
+raw_data/
+checkpoints/
+myvenv/
