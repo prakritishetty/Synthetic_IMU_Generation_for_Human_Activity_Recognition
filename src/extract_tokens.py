@@ -69,7 +69,8 @@ def main():
             all_masks.append(padding_mask.cpu().numpy())
             all_labels.append(my_Y.numpy())
             all_pids.append(my_PID.numpy())
-            all_raw_patches.append(my_X.cpu().numpy())
+            # all_raw_patches.append(my_X.cpu().numpy())
+            all_raw_patches.append(raw_batch.cpu().numpy())
             all_pos_info.append(my_pos.cpu().numpy())
 
     tokens = np.concatenate(all_tokens, axis=0)

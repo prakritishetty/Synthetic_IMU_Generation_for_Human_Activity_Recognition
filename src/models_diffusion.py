@@ -61,18 +61,36 @@ class TokenTransformerDiffusion(nn.Module):
         x = self.transformer(x, src_key_padding_mask=key_padding_mask)
         return self.output_proj(x)
 
+# class IMUDecoder(nn.Module):
+#     def __init__(self, token_dim=64, patch_dim=32*3):
+#         super().__init__()
+#         self.net = nn.Sequential(
+#             nn.Linear(token_dim, 128),
+#             nn.LayerNorm(128),
+#             nn.GELU(),
+#             nn.Linear(128, 256),
+#             nn.LayerNorm(256),
+#             nn.GELU(),
+#             nn.Linear(256, patch_dim),
+#             nn.Tanh() # <--- Hard constraint layer limits output strictly from -1.0 to 1.0!
+#         )
+#     def forward(self, tokens):
+#         return self.net(tokens) * 2.0 # Multiplies Tanh so the physical wave stays bounded exactly between -2g and +2g
+
+
 class IMUDecoder(nn.Module):
-    """ Lightweight MLP to decode abstract 64-d tokens back to physical Raw Patches """
-    def __init__(self, token_dim=64, patch_dim=32*3):
+    """ Maps a pooled Gen-AI Latent Sequence directly to a continuous 10-second physical Waveform """
+    def __init__(self, token_dim=64, patch_dim=300*3): # 300 samples * 3 axes
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(token_dim, 128),
-            nn.LayerNorm(128),
-            nn.GELU(),
-            nn.Linear(128, 256),
+            nn.Linear(token_dim, 256),
             nn.LayerNorm(256),
             nn.GELU(),
-            nn.Linear(256, patch_dim)
+            nn.Linear(256, 512),
+            nn.LayerNorm(512),
+            nn.GELU(),
+            nn.Linear(512, patch_dim),
+            nn.Tanh() # Constrains values strictly to prevent amplitude blowouts!
         )
-    def forward(self, tokens):
-        return self.net(tokens)
+    def forward(self, tokens_mean):
+        return self.net(tokens_mean) * 2.0

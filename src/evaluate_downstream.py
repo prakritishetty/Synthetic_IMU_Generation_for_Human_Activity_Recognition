@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 from tqdm import tqdm
 import wandb
+import time 
 
 from models_diffusion import TokenTransformerDiffusion, IMUDecoder
 
@@ -42,29 +43,52 @@ def sample_diffusion(diffusion_model, shape, classes, device, timesteps=1000):
                 x = x_mean
     return x
 
+# def plot_waveforms(real_raw, synthetic_raw, class_id, save_path):
+#     os.makedirs(os.path.dirname(save_path), exist_ok=True)
+#     real_seq = real_raw.reshape(-1, 3)
+#     syn_seq = synthetic_raw.reshape(-1, 3)
+    
+#     fig, axes = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
+#     fig.suptitle(f"Physical IMU Waveform Comparison (Activity Class {class_id})", fontsize=16)
+    
+#     axes[0].plot(real_seq[:, 0], label="Real X-Accel", color="blue", alpha=0.8)
+#     axes[0].plot(syn_seq[:, 0], label="Synthetic X-Accel", color="red", alpha=0.8)
+#     axes[0].legend(loc="upper right")
+    
+#     axes[1].plot(real_seq[:, 1], label="Real Y-Accel", color="blue", alpha=0.8)
+#     axes[1].plot(syn_seq[:, 1], label="Synthetic Y-Accel", color="red", alpha=0.8)
+#     axes[1].legend(loc="upper right")
+    
+#     axes[2].plot(real_seq[:, 2], label="Real Z-Accel", color="blue", alpha=0.8)
+#     axes[2].plot(syn_seq[:, 2], label="Synthetic Z-Accel", color="red", alpha=0.8)
+#     axes[2].legend(loc="upper right")
+    
+#     plt.tight_layout()
+#     plt.savefig(save_path, dpi=200)
+#     plt.close()
+
+
+
 def plot_waveforms(real_raw, synthetic_raw, class_id, save_path):
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    real_seq = real_raw.reshape(-1, 3)
-    syn_seq = synthetic_raw.reshape(-1, 3)
+    real_seq, syn_seq = real_raw.reshape(-1, 3), synthetic_raw.reshape(-1, 3)
     
     fig, axes = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
     fig.suptitle(f"Physical IMU Waveform Comparison (Activity Class {class_id})", fontsize=16)
     
-    axes[0].plot(real_seq[:, 0], label="Real X-Accel", color="blue", alpha=0.8)
-    axes[0].plot(syn_seq[:, 0], label="Synthetic X-Accel", color="red", alpha=0.8)
-    axes[0].legend(loc="upper right")
+    for i, axis_name in enumerate(["X", "Y", "Z"]):
+        axes[i].plot(real_seq[:, i], label=f"Real {axis_name}-Accel", color="blue", alpha=0.8)
+        axes[i].plot(syn_seq[:, i], label=f"Synthetic {axis_name}-Accel", color="red", alpha=0.8)
+        axes[i].set_ylabel("Amplitude (g-force)")
+        axes[i].legend(loc="upper right")
     
-    axes[1].plot(real_seq[:, 1], label="Real Y-Accel", color="blue", alpha=0.8)
-    axes[1].plot(syn_seq[:, 1], label="Synthetic Y-Accel", color="red", alpha=0.8)
-    axes[1].legend(loc="upper right")
-    
-    axes[2].plot(real_seq[:, 2], label="Real Z-Accel", color="blue", alpha=0.8)
-    axes[2].plot(syn_seq[:, 2], label="Synthetic Z-Accel", color="red", alpha=0.8)
-    axes[2].legend(loc="upper right")
-    
+    axes[-1].set_xlabel("Time Step (30Hz Samples)")
     plt.tight_layout()
     plt.savefig(save_path, dpi=200)
     plt.close()
+
+# Inside your main() function:
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -113,7 +137,9 @@ def main():
     plt.legend()
     plt.title("Latent Space Distribution: Real vs. Synthetic Generations")
     os.makedirs("plots", exist_ok=True)
-    plt.savefig("plots/tsne_latent_distribution.png", dpi=200)
+    timestamp = int(time.time())
+    plt.savefig(f"plots/tsne_latent_distribution_{timestamp}.png", dpi=200)
+    # plt.savefig("plots/tsne_latent_distribution.png", dpi=200)
     plt.close()
     
     for i in range(3): # Plot 3 random classes
@@ -123,7 +149,8 @@ def main():
         real_idx = np.where(real_labels == c_id)[0]
         if len(real_idx) > 0:
             real_samp = raw_patches[np.random.choice(real_idx)].reshape(-1)
-            plot_waveforms(real_samp, syn_raw_np[idx], class_id=c_id, save_path=f"plots/waveform_cmp_demo_{i}.png")
+            plot_waveforms(real_samp, syn_raw_np[idx], class_id=c_id, save_path=f"plots/waveform_class_{c_id}_batch_{timestamp}_{i}.png")
+            # plot_waveforms(real_samp, syn_raw_np[idx], class_id=c_id, save_path=f"plots/waveform_cmp_demo_{i}.png")
     
     
     wandb.init(project="BioPM-Diffusion")
