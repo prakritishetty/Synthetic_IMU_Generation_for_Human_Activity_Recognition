@@ -1,28 +1,29 @@
+#!/usr/bin/env python3
 import os
 import urllib.request
 import tarfile
 
-def download_wisdm(output_dir="raw_data/WISDM"):
+def main():
     url = "https://www.cis.fordham.edu/wisdm/includes/datasets/latest/WISDM_ar_latest.tar.gz"
-    os.makedirs(output_dir, exist_ok=True)
-    tar_path = os.path.join(output_dir, "WISDM_ar_latest.tar.gz")
-    
-    if not os.path.exists(tar_path):
-        print(f"Downloading WISDM from {url}...")
-        urllib.request.urlretrieve(url, tar_path)
-        print("Download complete.")
-    else:
-        print("Archive already exists. Skipping download.")
-        
-    print("Extracting archive...")
+    download_dir = "./raw_data"
+    tar_path = os.path.join(download_dir, "WISDM_ar_latest.tar.gz")
+    extract_dir = os.path.join(download_dir, "WISDM")
+
+    os.makedirs(download_dir, exist_ok=True)
+
+    print(f"Downloading WISDM dataset from {url}...")
+    # This might take a minute depending on your internet speed
+    urllib.request.urlretrieve(url, tar_path)
+    print("Download complete.")
+
+    print(f"Extracting to {extract_dir}...")
     with tarfile.open(tar_path, "r:gz") as tar:
-        tar.extractall(path=output_dir)
-        
-    wisdm_txt_path = os.path.join(output_dir, "WISDM_ar_v1.1", "WISDM_ar_v1.1_raw.txt")
-    if os.path.exists(wisdm_txt_path):
-        print(f"Success! WISDM raw data located at: {wisdm_txt_path}")
-    else:
-        print(f"Could not find the extracted txt file at {wisdm_txt_path}. Please check extraction manually.")
+        tar.extractall(path=extract_dir)
+    print("Extraction complete.")
+
+    # Clean up the zipped file to save space
+    os.remove(tar_path)
+    print(f"Done! Raw data is ready at: {extract_dir}")
 
 if __name__ == "__main__":
-    download_wisdm()
+    main()
