@@ -1,0 +1,53 @@
+Loading continuous tokens from features/biopm_tokens.npz...
+/gypsum/work1/zamani/prakriti/Synthetic_IMU_Generation_for_Human_Activity_Recognition/myvenv/lib/python3.12/site-packages/torch/cuda/__init__.py:371: UserWarning: Found GPU0 NVIDIA GeForce GTX TITAN X which is of compute capability (CC) 5.2.
+The following list shows the CCs this version of PyTorch was built for and the hardware CCs it supports:
+- 7.5 which supports hardware CC >=7.5,<8.0
+- 8.0 which supports hardware CC >=8.0,<9.0 except {8.7}
+- 8.6 which supports hardware CC >=8.6,<9.0 except {8.7}
+- 9.0 which supports hardware CC >=9.0,<10.0
+- 10.0 which supports hardware CC >=10.0,<11.0 except {10.1}
+- 12.0 which supports hardware CC >=12.0,<13.0
+Please follow the instructions at https://pytorch.org/get-started/locally/ to install a PyTorch release that supports one of these CUDA versions: 12.6
+  _warn_unsupported_code(d, device_cc, code_ccs)
+/gypsum/work1/zamani/prakriti/Synthetic_IMU_Generation_for_Human_Activity_Recognition/myvenv/lib/python3.12/site-packages/torch/cuda/__init__.py:489: UserWarning:
+NVIDIA GeForce GTX TITAN X with CUDA capability sm_52 is not compatible with the current PyTorch installation.
+The current PyTorch install supports CUDA capabilities sm_75 sm_80 sm_86 sm_90 sm_100 sm_120.
+If you want to use the NVIDIA GeForce GTX TITAN X GPU with PyTorch, please check the instructions at https://pytorch.org/get-started/locally/
+
+  queued_call()
+Starting training on CUDA for 30 epochs...
+Epoch 01/30:   0%|                                                                                       | 0/171 [00:00<?, ?it/s]
+Traceback (most recent call last):
+  File "/gypsum/work1/zamani/prakriti/Synthetic_IMU_Generation_for_Human_Activity_Recognition/src/train_diffusion.py", line 99, in <module>
+    main()
+  File "/gypsum/work1/zamani/prakriti/Synthetic_IMU_Generation_for_Human_Activity_Recognition/src/train_diffusion.py", line 66, in main
+    pred_raw = decoder_model(b_tokens)
+               ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gypsum/work1/zamani/prakriti/Synthetic_IMU_Generation_for_Human_Activity_Recognition/myvenv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gypsum/work1/zamani/prakriti/Synthetic_IMU_Generation_for_Human_Activity_Recognition/myvenv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gypsum/work1/zamani/prakriti/Synthetic_IMU_Generation_for_Human_Activity_Recognition/src/models_diffusion.py", line 96, in forward
+    return self.net(tokens_mean) * 2.0
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/gypsum/work1/zamani/prakriti/Synthetic_IMU_Generation_for_Human_Activity_Recognition/myvenv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gypsum/work1/zamani/prakriti/Synthetic_IMU_Generation_for_Human_Activity_Recognition/myvenv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gypsum/work1/zamani/prakriti/Synthetic_IMU_Generation_for_Human_Activity_Recognition/myvenv/lib/python3.12/site-packages/torch/nn/modules/container.py", line 253, in forward
+    input = module(input)
+            ^^^^^^^^^^^^^
+  File "/gypsum/work1/zamani/prakriti/Synthetic_IMU_Generation_for_Human_Activity_Recognition/myvenv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gypsum/work1/zamani/prakriti/Synthetic_IMU_Generation_for_Human_Activity_Recognition/myvenv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gypsum/work1/zamani/prakriti/Synthetic_IMU_Generation_for_Human_Activity_Recognition/myvenv/lib/python3.12/site-packages/torch/nn/modules/linear.py", line 134, in forward
+    return F.linear(input, self.weight, self.bias)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: CUDA error: CUBLAS_STATUS_ARCH_MISMATCH when calling `cublasCreate(handle)`
