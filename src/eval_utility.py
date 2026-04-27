@@ -22,6 +22,17 @@ def extract_hyper_dense_features(tokens):
     min_p = tokens.min(axis=1)
     return np.hstack((mean_p, std_p, max_p, min_p))
 
+def eval_discrimination(X_real, X_syn):
+    """Can a classifier distinguish Real from Synthetic?"""
+    X = np.vstack((X_real, X_syn))
+    y = np.concatenate([np.zeros(len(X_real)), np.ones(len(X_syn))])
+    
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    clf = HistGradientBoostingClassifier().fit(X_train, y_train)
+    score = f1_score(y_test, clf.predict(X_test))
+    print(f"Discrimination Score (Real vs Syn): {score:.4f}")
+    print("(Lower is better - means synthetic is indistinguishable from real)")
+
 def main():
     args = parse_args()
     
@@ -51,7 +62,8 @@ def main():
     X_test_scaled = scaler.transform(X_test)
 
     # Train Baseline using SOTA Gradient Boosting
-    clf_baseline = HistGradientBoostingClassifier(max_iter=200, random_state=42, class_weight='balanced')
+    # clf_baseline = HistGradientBoostingClassifier(max_iter=200, random_state=42, class_weight='balanced')
+    clf_baseline = HistGradientBoostingClassifier(max_iter=200, random_state=42)
     clf_baseline.fit(X_train_imb_scaled, y_train_imb)
     y_pred_base = clf_baseline.predict(X_test_scaled)
     f1_base = f1_score(y_test, y_pred_base, average='macro')
@@ -93,6 +105,7 @@ def main():
     print(f"Baseline F1 Score:                   {f1_base:.4f}")
     print(f"Augmented F1 (Curated Synthetic):    {f1_aug:.4f}")
     
+    eval_discrimination(X_real, X_syn)
     
 
 if __name__ == "__main__":

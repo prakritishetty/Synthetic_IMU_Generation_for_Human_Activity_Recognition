@@ -13,7 +13,7 @@ def parse_args():
     p.add_argument("--num_samples", type=int, default=300) # Increased sample count
     p.add_argument("--seed_len", type=int, default=3)      
     p.add_argument("--target_class", type=int, default=0)  # ONLY generate this class
-    p.add_argument("--noise_std", type=float, default=0.05) # Add variance to prevent collapse
+    p.add_argument("--noise_std", type=float, default=0.1) # Add variance to prevent collapse
     return p.parse_args()
 
 def main():
@@ -56,6 +56,7 @@ def main():
                 # INJECT NOISE: This prevents mode collapse so the dots spread out!
                 noise = torch.randn_like(next_token) * args.noise_std
                 next_token = next_token + noise
+                next_token = torch.clamp(next_token, -3.0, 3.0)
                 
                 current_seq = torch.cat([current_seq, next_token], dim=1)
             

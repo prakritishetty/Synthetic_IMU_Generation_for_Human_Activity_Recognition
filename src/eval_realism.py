@@ -21,8 +21,11 @@ def main():
     syn_data = np.load(args.syn_tokens)
 
     # Average the tokens across the 10-second window to get a flat 64-d vector per sample
-    real_features = real_data['tokens'].mean(axis=1) 
-    syn_features = syn_data['tokens'].mean(axis=1)
+    # real_features = real_data['tokens'].mean(axis=1) 
+    # syn_features = syn_data['tokens'].mean(axis=1)
+    mid = real_data['tokens'].shape[1] // 2
+    real_features = real_data['tokens'][:, mid-5:mid+5, :].mean(axis=1)
+    syn_features = syn_data['tokens'][:, mid-5:mid+5, :].mean(axis=1)
 
     # Combine them for the TSNE transformation
     X_combined = np.vstack((real_features, syn_features))
