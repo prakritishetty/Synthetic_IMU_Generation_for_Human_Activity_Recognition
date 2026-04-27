@@ -45,8 +45,8 @@ def main():
     model = load_pretrained_encoder(args.checkpoint, device=args.device)
 
     all_tokens, all_masks, all_labels, all_pids = [], [], [], []
-    # Additionally capturing raw patches info to train the IMU decoding later!
-    all_raw_patches, all_pos_info = [], []
+    # ME patches (L, 32) for decoder training, and physical windows (T, 3) for waveform plots
+    all_raw_patches, all_pos_info, all_raw_windows = [], [], []
 
     print("Extracting full sequence tokens...")
     with torch.no_grad():
@@ -71,6 +71,7 @@ def main():
             all_pids.append(my_PID.numpy())
             all_raw_patches.append(my_X.cpu().numpy())
             all_pos_info.append(my_pos.cpu().numpy())
+            all_raw_windows.append(raw_batch.numpy())  # physical (bs, T, 3) windows
 
     tokens = np.concatenate(all_tokens, axis=0)
     masks = np.concatenate(all_masks, axis=0)
@@ -78,14 +79,16 @@ def main():
     pids = np.concatenate(all_pids, axis=0)
     raw_patches = np.concatenate(all_raw_patches, axis=0)
     pos_info = np.concatenate(all_pos_info, axis=0)
+    raw_windows = np.concatenate(all_raw_windows, axis=0)
 
-    np.savez(args.output, 
-             tokens=tokens, 
-             masks=masks, 
-             labels=labels, 
+    np.savez(args.output,
+             tokens=tokens,
+             masks=masks,
+             labels=labels,
              pids=pids,
              raw_patches=raw_patches,
-             pos_info=pos_info)
+             pos_info=pos_info,
+             raw_windows=raw_windows)
     
     print("=" * 60)
     print("Tokens saved successfully!")

@@ -2,6 +2,7 @@ import math
 import torch
 import torch.nn as nn
 
+
 class SinusoidalPosEmb(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -16,54 +17,129 @@ class SinusoidalPosEmb(nn.Module):
         emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
         return emb
 
+
+class AdaLayerNorm(nn.Module):
+    """
+    DiT-style Adaptive LayerNorm.
+    Predicts scale and shift from a conditioning vector, which makes class
+    and timestep information much more effective than simple addition.
+    Reference: Peebles & Xie, "Scalable Diffusion Models with Transformers" (DiT).
+    """
+    def __init__(self, d_model, cond_dim):
+        super().__init__()
+        # elementwise_affine=False: we supply our own scale/shift from the condition
+        self.norm = nn.LayerNorm(d_model, elementwise_affine=False, eps=1e-6)
+        # Projects conditioning → (scale, shift) per feature
+        self.proj = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(cond_dim, d_model * 2)
+        )
+        # Zero-init so the block starts as an identity transform
+        nn.init.zeros_(self.proj[-1].weight)
+        nn.init.zeros_(self.proj[-1].bias)
+
+    def forward(self, x, cond):
+        # cond: (B, cond_dim) → scale/shift: (B, 1, d_model)
+        scale_shift = self.proj(cond).unsqueeze(1)
+        scale, shift = scale_shift.chunk(2, dim=-1)
+        return (1.0 + scale) * self.norm(x) + shift
+
+
+class DiTBlock(nn.Module):
+    """
+    Transformer block using AdaLayerNorm for conditioning (DiT-style).
+    The conditioning signal (time + class) modulates both the attention
+    pre-norm and the FFN pre-norm independently.
+    """
+    def __init__(self, d_model, nhead, cond_dim, dim_feedforward=None, dropout=0.1):
+        super().__init__()
+        dim_feedforward = dim_feedforward or d_model * 4
+        self.norm1 = AdaLayerNorm(d_model, cond_dim)
+        self.attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=True)
+        self.norm2 = AdaLayerNorm(d_model, cond_dim)
+        self.ff = nn.Sequential(
+            nn.Linear(d_model, dim_feedforward),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(dim_feedforward, d_model),
+        )
+        self.drop = nn.Dropout(dropout)
+
+    def forward(self, x, cond, key_padding_mask=None):
+        # Self-attention with adaptive pre-norm
+        normed = self.norm1(x, cond)
+        attn_out, _ = self.attn(normed, normed, normed, key_padding_mask=key_padding_mask)
+        x = x + self.drop(attn_out)
+        # Feed-forward with adaptive pre-norm
+        x = x + self.drop(self.ff(self.norm2(x, cond)))
+        return x
+
+
 class TokenTransformerDiffusion(nn.Module):
-    def __init__(self, seq_len=76, token_dim=64, num_classes=6, d_model=128, nhead=4, num_layers=4):
+    """
+    Transformer-based DDPM noise predictor with DiT-style AdaLayerNorm conditioning.
+    Increased to 6 layers and wider condition MLP compared to previous version.
+    """
+    def __init__(self, seq_len=192, token_dim=64, num_classes=6,
+                 d_model=128, nhead=4, num_layers=6):
         super().__init__()
         self.seq_len = seq_len
         self.token_dim = token_dim
-        
-        # Maps diffusion time-step [0, 1000] to a dense embedding
+        cond_dim = d_model * 2  # richer conditioning space
+
+        # Timestep embedding: sinusoidal → wide MLP
         self.time_mlp = nn.Sequential(
             SinusoidalPosEmb(d_model),
-            nn.Linear(d_model, d_model * 2),
+            nn.Linear(d_model, d_model * 4),
             nn.GELU(),
-            nn.Linear(d_model * 2, d_model)
+            nn.Linear(d_model * 4, cond_dim),
         )
-        # Condition on Activity Class ('Walking', 'Stairs', etc.)
-        self.class_emb = nn.Embedding(num_classes, d_model)
+        # Class embedding
+        self.class_emb = nn.Embedding(num_classes, cond_dim)
+
+        # Input projection + learned positional embedding
         self.input_proj = nn.Linear(token_dim, d_model)
-        
-        # Learned position embedding for the continuous sequence
-        self.pos_emb = nn.Parameter(torch.randn(1, seq_len, d_model))
-        
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model, nhead=nhead, dim_feedforward=d_model*4, 
-            dropout=0.1, activation="gelu", batch_first=True
-        )
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        self.pos_emb = nn.Parameter(torch.randn(1, seq_len, d_model) * 0.02)
+
+        # DiT blocks
+        self.blocks = nn.ModuleList([
+            DiTBlock(d_model, nhead, cond_dim, dim_feedforward=d_model * 4, dropout=0.1)
+            for _ in range(num_layers)
+        ])
+
+        self.final_norm = nn.LayerNorm(d_model)
         self.output_proj = nn.Linear(d_model, token_dim)
-        
+
+        # Zero-init output projection (stabilises early training)
+        nn.init.zeros_(self.output_proj.weight)
+        nn.init.zeros_(self.output_proj.bias)
+
     def forward(self, x, t, c, mask=None):
         B, L, _ = x.shape
-        t_emb = self.time_mlp(t)          
-        c_emb = self.class_emb(c)         
-        
-        x = self.input_proj(x)            
-        x = x + self.pos_emb[:, :L, :]    
-        
-        # Inject Time and Class into sequence uniformly
-        cond_emb = (t_emb + c_emb).unsqueeze(1) 
-        x = x + cond_emb
-        
-        # Invert valid boolean mask for PyTorch Transformer padding compatibility
+        t_emb = self.time_mlp(t)           # (B, cond_dim)
+        c_emb = self.class_emb(c)          # (B, cond_dim)
+        cond = t_emb + c_emb               # (B, cond_dim)
+
+        x = self.input_proj(x)
+        x = x + self.pos_emb[:, :L, :]
+
+        # Invert valid boolean mask for PyTorch MHA padding compatibility
         key_padding_mask = ~mask if mask is not None else None
-        
-        x = self.transformer(x, src_key_padding_mask=key_padding_mask)
+
+        for block in self.blocks:
+            x = block(x, cond, key_padding_mask=key_padding_mask)
+
+        x = self.final_norm(x)
         return self.output_proj(x)
 
+
 class IMUDecoder(nn.Module):
-    """ Lightweight MLP to decode abstract 64-d tokens back to physical Raw Patches """
-    def __init__(self, token_dim=64, patch_dim=32*3):
+    """
+    MLP decoder: 64-d token → normalised movement-element patch.
+    Sigmoid output bounds predictions to (0, 1), matching the
+    min-max normalised ME patches produced by the BioPM preprocessor.
+    """
+    def __init__(self, token_dim=64, patch_dim=32):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(token_dim, 128),
@@ -72,7 +148,9 @@ class IMUDecoder(nn.Module):
             nn.Linear(128, 256),
             nn.LayerNorm(256),
             nn.GELU(),
-            nn.Linear(256, patch_dim)
+            nn.Linear(256, patch_dim),
+            nn.Sigmoid(),  # bound output to (0, 1) — matches normalised ME patch targets
         )
+
     def forward(self, tokens):
         return self.net(tokens)
