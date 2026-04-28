@@ -78,24 +78,46 @@ def plot_waveforms(real_window, syn_patches, class_id, save_path):
     We flatten each group and plot them alongside the corresponding real axis.
     """
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    real_seq = real_raw.reshape(-1, 3)
-    syn_seq = synthetic_raw.reshape(-1, 3)
-    
-    fig, axes = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
-    fig.suptitle(f"Physical IMU Waveform Comparison (Activity Class {class_id})", fontsize=16)
-    
-    axes[0].plot(real_seq[:, 0], label="Real X-Accel", color="blue", alpha=0.8)
-    axes[0].plot(syn_seq[:, 0], label="Synthetic X-Accel", color="red", alpha=0.8)
-    axes[0].legend(loc="upper right")
-    
-    axes[1].plot(real_seq[:, 1], label="Real Y-Accel", color="blue", alpha=0.8)
-    axes[1].plot(syn_seq[:, 1], label="Synthetic Y-Accel", color="red", alpha=0.8)
-    axes[1].legend(loc="upper right")
-    
-    axes[2].plot(real_seq[:, 2], label="Real Z-Accel", color="blue", alpha=0.8)
-    axes[2].plot(syn_seq[:, 2], label="Synthetic Z-Accel", color="red", alpha=0.8)
-    axes[2].legend(loc="upper right")
-    
+    L = syn_patches.shape[0]
+    ppax = L // 3  # patches per axis
+
+    syn_x = syn_patches[:ppax].reshape(-1)
+    syn_y = syn_patches[ppax: 2 * ppax].reshape(-1)
+    syn_z = syn_patches[2 * ppax:].reshape(-1)
+
+    # Normalise real window to [0, 1] per axis so scales are comparable
+    def norm01(v):
+        lo, hi = v.min(), v.max()
+        return (v - lo) / (hi - lo + 1e-10)
+
+    real_x = norm01(real_window[:, 0])
+    real_y = norm01(real_window[:, 1])
+    real_z = norm01(real_window[:, 2])
+
+    fig, axes = plt.subplots(3, 1, figsize=(12, 9), sharex=False)
+    fig.suptitle(
+        f"IMU Waveform Comparison — Activity Class {class_id}\n"
+        "(real normalised to [0,1]; synthetic = decoder ME patch output)",
+        fontsize=13
+    )
+
+    for ax, real_sig, syn_sig, label in zip(
+        axes,
+        [real_x, real_y, real_z],
+        [syn_x,  syn_y,  syn_z],
+        ["X-Accel", "Y-Accel", "Z-Accel"],
+    ):
+        ax.plot(real_sig, label=f"Real {label} (norm.)",
+                color="royalblue", alpha=0.85, linewidth=0.9)
+        # Align synthetic to same time axis by resampling index
+        syn_idx = np.linspace(0, len(syn_sig) - 1, len(real_sig))
+        syn_resampled = np.interp(syn_idx, np.arange(len(syn_sig)), syn_sig)
+        ax.plot(syn_resampled, label=f"Synthetic {label} (norm.)",
+                color="tomato", alpha=0.85, linewidth=0.9)
+        ax.set_ylabel("Norm. amplitude")
+        ax.legend(loc="upper right", fontsize=8)
+
+    axes[-1].set_xlabel("Time Step (30 Hz samples)")
     plt.tight_layout()
     plt.savefig(save_path, dpi=200)
     plt.close()
@@ -182,14 +204,24 @@ def main():
             continue
 
         real_idx = np.where(real_labels == c_id)[0]
-        if len(real_idx) > 0:
-            real_samp = raw_patches[np.random.choice(real_idx)].reshape(-1)
-            plot_waveforms(real_samp, syn_raw_np[idx], class_id=c_id, save_path=f"plots/waveform_cmp_demo_{i}.png")
-    
-    
+        if len(real_idx) == 0:
+            continue
+
+        real_win = raw_windows[np.random.choice(real_idx)]  # (T, 3) physical
+        syn_pats = syn_patches_np[idx]                       # (L, 32) decoded
+
+        plot_waveforms(
+            real_win, syn_pats,
+            class_id=c_id,
+            save_path=f"plots/waveform_cmp_demo_{plots_saved}.png"
+        )
+        used_classes.add(c_id)
+        plots_saved += 1
+
     wandb.init(project="BioPM-Diffusion")
     print("Uploading plots to WandB...")
-    wandb.log({"Latent/t-SNE": wandb.Image("plots/tsne_latent_distribution.png")})
+    tsne_fname = f"plots/tsne_latent_distribution_{timestamp}.png"
+    wandb.log({"Latent/t-SNE": wandb.Image(tsne_fname)})
     wf_logs = {}
     for i in range(plots_saved):
         wf_logs[f"Waveform/class_cmp_{i}"] = wandb.Image(

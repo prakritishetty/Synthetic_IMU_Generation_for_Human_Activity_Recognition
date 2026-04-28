@@ -134,14 +134,23 @@ class TokenTransformerDiffusion(nn.Module):
 
 
 class IMUDecoder(nn.Module):
-    """ Lightweight MLP to decode abstract 64-d tokens back to physical Raw Patches """
-    def __init__(self, token_dim=64, patch_dim=32*3):
+    """
+    MLP decoder: 64-d token → normalised movement-element patch.
+    Sigmoid output bounds predictions to (0, 1), matching the
+    min-max normalised ME patches produced by the BioPM preprocessor.
+    """
+    def __init__(self, token_dim=64, patch_dim=32):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(token_dim, 256),
+            nn.Linear(token_dim, 128),
+            nn.LayerNorm(128),
+            nn.GELU(),
+            nn.Linear(128, 256),
             nn.LayerNorm(256),
             nn.GELU(),
-            nn.Linear(256, patch_dim)
+            nn.Linear(256, patch_dim),
+            nn.Sigmoid(),  # bound output to (0, 1) — matches normalised ME patch targets
         )
+
     def forward(self, tokens):
         return self.net(tokens)

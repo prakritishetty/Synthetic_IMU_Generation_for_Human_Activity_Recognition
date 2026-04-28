@@ -59,18 +59,23 @@ def main():
             my_add = my_add.to(args.device, dtype=torch.float)
 
             # Padding mask: boolean tensor telling us which patches are valid
-            padding_mask = ~torch.isnan(my_X).any(dim=-1)
+            # padding_mask = ~torch.isnan(my_X).any(dim=-1)
 
             # No mask modeling logic here, just forward.
             mask = torch.zeros(bs, my_X.shape[1], device=args.device)
             acc_tokens = model.encoder_acc(my_X, my_pos, mask, my_add)
+            input_mask = ~torch.isnan(my_X).any(dim=-1)
+            token_mask = torch.nn.functional.interpolate(
+                input_mask.unsqueeze(1).float(), 
+                size=acc_tokens.shape[1], 
+                mode='nearest'
+            ).squeeze(1).bool()
 
             all_tokens.append(acc_tokens.cpu().numpy())
-            all_masks.append(padding_mask.cpu().numpy())
+            all_masks.append(token_mask.cpu().numpy())
             all_labels.append(my_Y.numpy())
             all_pids.append(my_PID.numpy())
-            # all_raw_patches.append(my_X.cpu().numpy())
-            all_raw_patches.append(raw_batch.cpu().numpy())
+            all_raw_patches.append(my_X.cpu().numpy())
             all_pos_info.append(my_pos.cpu().numpy())
             all_raw_windows.append(raw_batch.numpy())  # physical (bs, T, 3) windows
 
