@@ -23,7 +23,7 @@ def get_ddpm_schedule(timesteps=1000):
     alphas = 1.0 - torch.linspace(1e-4, 0.02, timesteps)
     return torch.cumprod(alphas, dim=0)
 
-def sample_diffusion(diffusion_model, shape, classes, device, timesteps=1000):
+def sample_diffusion(diffusion_model, shape, classes, device, timesteps=1000, w=1.5, num_classes=6):
     diffusion_model.eval()
     alphas_cumprod = get_ddpm_schedule(timesteps).to(device)
     b, L, d = shape
@@ -31,7 +31,18 @@ def sample_diffusion(diffusion_model, shape, classes, device, timesteps=1000):
     with torch.no_grad():
         for i in reversed(range(timesteps)):
             t_tensor = torch.full((b,), i, device=device, dtype=torch.long)
-            pred_noise = diffusion_model(x, t_tensor, classes, mask=torch.ones((b, L), device=device, dtype=torch.bool))
+            
+            # CFG
+            null_classes = torch.full_like(classes, num_classes)
+            x_double = torch.cat([x, x], dim=0)
+            t_double = torch.cat([t_tensor, t_tensor], dim=0)
+            c_double = torch.cat([classes, null_classes], dim=0)
+            m_double = torch.ones((2*b, L), device=device, dtype=torch.bool)
+            
+            pred_noise_double = diffusion_model(x_double, t_double, c_double, mask=m_double)
+            pred_cond, pred_uncond = pred_noise_double.chunk(2, dim=0)
+            pred_noise = pred_uncond + w * (pred_cond - pred_uncond)
+            
             alpha_t, alpha_t_prev = alphas_cumprod[i], (alphas_cumprod[i-1] if i > 0 else torch.tensor(1.0, device=device))
             beta_t = 1 - (alpha_t / alpha_t_prev)
             x_mean = (1 / torch.sqrt(1 - beta_t)) * (x - (beta_t / torch.sqrt(1 - alpha_t)) * pred_noise)
@@ -96,12 +107,12 @@ def main():
     f1_base = f1_score(y_test, preds_base, average='macro')
     
     # 2. Diffusion Repair Model
-    model = TokenTransformerDiffusion(seq_len=L, token_dim=64, num_classes=num_classes).to(args.device)
+    model = TokenTransformerDiffusion(seq_len=L, token_dim=64, num_classes=num_classes + 1).to(args.device)
     model.load_state_dict(torch.load(args.diff_ckpt, map_location=args.device, weights_only=True))
     
     gen_n = len(rare_idx) - len(keep_rare) 
     gen_c = torch.full((gen_n,), rare_class, device=args.device, dtype=torch.long)
-    syn_tokens = sample_diffusion(model, (gen_n, L, 64), gen_c, args.device)
+    syn_tokens = sample_diffusion(model, (gen_n, L, 64), gen_c, args.device, w=1.5, num_classes=num_classes)
     syn_features = syn_tokens.cpu().numpy().mean(axis=1)
     
     X_train_repaired = np.concatenate([X_train, syn_features])

@@ -21,15 +21,9 @@ def get_ddpm_schedule(timesteps=1000, beta_start=1e-4, beta_end=0.02):
     return betas, alphas_cumprod
 
 
-def sample_diffusion(diffusion_model, shape, classes, device, timesteps=1000):
+def sample_diffusion(diffusion_model, shape, classes, device, timesteps=1000, w=1.5, num_classes=6):
     """
-    Standard DDPM ancestral sampler (Ho et al. 2020).
-
-    The key fix vs. the previous version: we precompute `betas` from the
-    same linear schedule used during training and use them DIRECTLY in the
-    reverse step.  The old code derived beta_t as (alpha_t / alpha_t_prev),
-    which is a noisy approximation that compounds errors over 1000 steps and
-    pushes samples to the outskirts of the latent space.
+    Standard DDPM ancestral sampler with Classifier-Free Guidance.
     """
     diffusion_model.eval()
     betas, alphas_cumprod = get_ddpm_schedule(timesteps)
@@ -41,14 +35,24 @@ def sample_diffusion(diffusion_model, shape, classes, device, timesteps=1000):
     x = torch.randn(shape, device=device)
 
     with torch.no_grad():
-        for i in tqdm(reversed(range(timesteps)),
-                      desc="Reverse Denoising", total=timesteps):
+        for i in tqdm(reversed(range(timesteps)), desc="Reverse Denoising", total=timesteps):
             t_tensor = torch.full((B,), i, device=device, dtype=torch.long)
             full_mask = torch.ones((B, L), device=device, dtype=torch.bool)
 
-            pred_noise = diffusion_model(x, t_tensor, classes, mask=full_mask)
+            # CFG: Double batch (cond and uncond)
+            null_classes = torch.full_like(classes, num_classes)
+            x_double = torch.cat([x, x], dim=0)
+            t_double = torch.cat([t_tensor, t_tensor], dim=0)
+            c_double = torch.cat([classes, null_classes], dim=0)
+            m_double = torch.cat([full_mask, full_mask], dim=0)
+            
+            pred_noise_double = diffusion_model(x_double, t_double, c_double, mask=m_double)
+            pred_cond, pred_uncond = pred_noise_double.chunk(2, dim=0)
+            
+            # Extrapolate away from unconditional prediction
+            pred_noise = pred_uncond + w * (pred_cond - pred_uncond)
 
-            # Standard DDPM reverse step (Eq. 11 in Ho et al.)
+            # Standard DDPM reverse step
             beta_t    = betas[i]
             alpha_t   = alphas[i]
             alpha_bar = alphas_cumprod[i]
@@ -151,7 +155,7 @@ def main():
     num_classes = int(real_labels.max()) + 1
 
     diffusion_model = TokenTransformerDiffusion(
-        seq_len=L, token_dim=64, num_classes=num_classes
+        seq_len=L, token_dim=64, num_classes=num_classes + 1
     ).to(args.device)
     decoder_model = IMUDecoder(token_dim=64, patch_dim=patch_dim).to(args.device)
 
@@ -164,7 +168,7 @@ def main():
     print(f"Generating {args.gen_n} synthetic sequences...")
     gen_c = torch.randint(0, num_classes, (args.gen_n,), device=args.device)
     syn_tokens = sample_diffusion(
-        diffusion_model, (args.gen_n, L, 64), gen_c, args.device)
+        diffusion_model, (args.gen_n, L, 64), gen_c, args.device, w=1.5, num_classes=num_classes)
 
     # 2. Decode to normalised ME patches
     with torch.no_grad():

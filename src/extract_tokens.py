@@ -1,47 +1,41 @@
 #!/usr/bin/env python3
 """
-extract_tokens.py — Extract continuous BioPM token sequences.
-
-Instead of heavily pooling the outputs to 1028-d vectors, this saves the full 
-(N, L, 64) token matrices and the boolean padding masks. This is the exact 
-continuous space we will use to train our Diffusion generator.
+extract_tokens.py — Extract unpooled (N, L, 64) BioPM tokens for generative training.
 """
+
 import os
 import sys
 import argparse
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from src.models.biopm import load_pretrained_encoder
-from src.data.dataset import MovementElementDataset
 from src.data.preprocessing import load_preprocessed_h5
 
 def parse_args():
-    p = argparse.ArgumentParser()
-    p.add_argument("--data_dir", type=str, required=True, help="Directory with Data_MeLabel_*.h5 files")
-    p.add_argument("--checkpoint", type=str, required=True, help="Path to 50MR checkpoint.pt")
-    p.add_argument("--output", type=str, default="features/biopm_tokens.npz")
+    p = argparse.ArgumentParser(description="Extract raw BioPM tokens for generation")
+    p.add_argument("--data_dir", type=str, required=True,
+                   help="Directory with Data_MeLabel_*.h5 files")
+    p.add_argument("--checkpoint", type=str, required=True,
+                   help="Path to 50MR checkpoint.pt")
+    p.add_argument("--output", type=str, default="features/biopm_tokens.npz",
+                   help="Output .npz file path")
     p.add_argument("--batch_size", type=int, default=32)
-    p.add_argument("--device", type=str, default="cpu", choices=["cpu", "cuda"])
+    p.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     return p.parse_args()
 
 def main():
     args = parse_args()
-    os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
+    print("=" * 60)
+    print("BioPM Token Extraction (Generative Pipeline)")
+    print("=" * 60)
 
-    print(f"Loading data from {args.data_dir}...")
+    # 1. Load Data and Model
+    print(f"Loading preprocessed data from {args.data_dir}...")
     (X, pos_info, add_emb, labels, pids, X_grav, raw_acc) = load_preprocessed_h5(args.data_dir)
     
-    dataset = MovementElementDataset(
-        X=X, X_grav=raw_acc, y=labels, pos_info=pos_info,
-        additional_embedding=add_emb, pid=pids,
-        name="extract_tokens", is_label=True,
-    )
-    loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False)
-
-    print(f"Loaded {X.shape[0]} windows. Pad size (L) = {X.shape[1]}")
+    print(f"Loading model checkpoint from {args.checkpoint} onto {args.device}...")
     model = load_pretrained_encoder(args.checkpoint, device=args.device)
 
     all_tokens, all_masks, all_labels, all_pids = [], [], [], []
@@ -50,13 +44,13 @@ def main():
 
     print("Extracting full sequence tokens...")
     with torch.no_grad():
-        for batch in loader:
-            my_X, my_Y, my_PID, raw_batch, my_pos, my_add = batch
-            bs = my_X.shape[0]
-
-            my_X = my_X.to(args.device, dtype=torch.float)
-            my_pos = my_pos.to(args.device, dtype=torch.float)
-            my_add = my_add.to(args.device, dtype=torch.float)
+        for i in range(0, N, args.batch_size):
+            end_idx = min(i + args.batch_size, N)
+            
+            # Slice batch
+            X_batch = torch.from_numpy(X[i:end_idx]).float().to(args.device)
+            pos_batch = torch.from_numpy(pos_info[i:end_idx]).float().to(args.device)
+            add_batch = torch.from_numpy(add_emb[i:end_idx]).float().to(args.device)
 
             # Padding mask: boolean tensor telling us which patches are valid
             # padding_mask = ~torch.isnan(my_X).any(dim=-1)
@@ -97,10 +91,9 @@ def main():
              raw_windows=raw_windows)
     
     print("=" * 60)
-    print("Tokens saved successfully!")
-    print(f"  Tokens shape:  {tokens.shape}")
-    print(f"  Valid length:  {masks.sum(axis=1).mean():.1f} avg valid patches per window")
-    print(f"  Saved to:      {args.output}")
+    print(f"Extraction complete! Saved to {args.output}")
+    print(f"  Tokens shape:    {all_tokens.shape}")
+    print(f"  Pad Masks shape: {pad_masks.shape}")
 
 if __name__ == "__main__":
     main()

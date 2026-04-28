@@ -1,0 +1,78 @@
+# Implementation Plan: Comprehensive Pipeline Analysis and Novel Evaluations
+
+This document summarizes our complete understanding of the codebase's logic flows, architectural decisions, and addresses all your questions. It also proposes the concrete implementation steps for the novel evaluations you requested.
+
+## 1. Pipeline Understanding & Technical Clarifications
+
+### A. Data Preprocessing (`preprocess_wisdm.py`)
+1. **Raw Ingestion**: Loads WISDM 20Hz tri-axial accelerometer data. Maps 6 text labels to integers.
+2. **Filtering**: Resamples to 30Hz. Applies a bandpass filter (0.5Hz-12Hz) to extract **dynamic movements** and a lowpass filter (<0.5Hz) to isolate **gravity**.
+3. **BioPM Zero-Crossing**: Segments the filtered signals into windows (10s size, 5s stride). Uses zero-crossings to extract "Movement Elements" (MEs) representing discrete physical movements. Extracts normalized ME patches. 
+4. **Gravity Handling**: Gravity is isolated as a low-frequency component and saved separately in the HDF5 as `x_gravity`. However, the current generation pipelines focus purely on the dynamic BioPM tokens (`x_acc_filt`). 
+
+### B. Token Extraction (`extract_tokens.py`)
+- Passes the ME patches through a pre-trained BioPM transformer encoder.
+- Converts physical variable-length ME sequences into fixed-dimension continuous token sequences of shape `(N, L, 64)`.
+- The Diffusion pipeline also saves the raw physical windows and the normalized ME patches for decoder training and visual evaluation.
+
+### C. Baseline Autoregressive Pipeline
+- **Script**: `train_generator.py`
+- **Architecture**: A standard causal Transformer Encoder acting as an autoregressive language model.
+- **Loss**: Next-token prediction (Mean Squared Error) across the sequence length.
+- **Synthesis (`generate_synthetic.py`)**: Takes a short seed sequence from the target class from real data, and iteratively predicts the next token. Injects Gaussian noise (`noise_std=0.1`) at each step to prevent mode collapse.
+
+### D. Diffusion Pipeline
+- **Script**: `train_diffusion.py`
+- **Architecture**:
+  - `TokenTransformerDiffusion`: Uses DiT (Diffusion Transformer) blocks. The model uses Adaptive Layer Norm to inject timestep and class condition information directly into the transformer blocks.
+  - `IMUDecoder`: A simple MLP that maps 64-d abstract tokens back to 32-d normalized physical ME patches (bounded by a Sigmoid).
+- **Loss**:
+  - Diffusion Transformer: Standard DDPM L2 loss (MSE) predicting the added noise $\epsilon$.
+  - Decoder: MSE loss between predicted 32-d patches and the ground-truth 32-d ME patches.
+- **Synthesis**: Standard DDPM ancestral sampling from pure Gaussian noise, denoising iteratively using the predicted noise, conditioned on the target class.
+
+---
+
+## 2. Proposed Novel Evaluations
+
+To address your requirements, I propose creating the following new evaluation scripts:
+
+### [NEW] `eval_simple_classification.py`
+**Goal**: Simple downstream classification on 3 prominent classes (e.g., Walking, Jogging, Sitting).
+- Train a RandomForest classifier on 3 distinct settings:
+  1. Real Data Only
+  2. Synthetic Data Only (Diffusion or Baseline)
+  3. Real + Synthetic Data
+- Compare Accuracy and F1-Scores on a held-out Real test set.
+
+### [NEW] `eval_physical_sanity.py`
+**Goal**: Physical world sense and out-of-the-box evaluations for synthetic data.
+- **Amplitude Distribution**: Compare the statistical distribution (mean, variance, max, min) of the decoded 32-d ME patches between Real and Synthetic data. If the synthetic data is physically sound, the amplitude histograms should overlap closely.
+- **Temporal Smoothness / Continuity**: Calculate the step-to-step L2 distance (gradient) between consecutive tokens/patches in a sequence to ensure synthetic data isn't generating chaotic, jittery high-frequency noise unlike human biological motion.
+
+### [NEW] `eval_distributional_shifts.py`
+**Goal**: Analyze distributional shifts and the Familiarity Hypothesis.
+- **PCA Manifold Analysis**: Project both Real and Synthetic (Baseline + Diffusion) `(N, 64)` averaged tokens into a 2D/3D Principal Component space. This helps visualize if synthetic data safely interpolates within the real manifold or extrapolates out of distribution.
+- **Fréchet Distance (FD)**: Compute the Fréchet Distance (similar to FID for images) between the real token distribution and synthetic token distribution to provide a single quantitative metric for distributional realism.
+
+### [NEW] `eval_loso_validation.py`
+**Goal**: Leave-One-Subject-Out (LOSO) validation and relative gains per class.
+- Since we have Participant IDs (`pids`) from the token extraction, we will split the dataset by leaving one (or a few) subjects out as the test set.
+- We will augment the training set with synthetic data for specific classes and evaluate the classifier on the unseen subject's data.
+- Output a breakdown of relative F1 score gains per class.
+
+### [NEW] `eval_compare_baselines.py`
+**Goal**: Direct quantitative comparison between the Autoregressive Baseline and the Diffusion Model.
+- Run the aforementioned downstream utility (F1 scores) and distributional shift (Fréchet Distance) metrics on *both* generated token sets simultaneously to directly contrast their performance.
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Feedback Needed:**
+> 1. Do the clarifications on architecture and gravity address your questions fully?
+> 2. For the Simple Classification, are "Walking, Jogging, Sitting" acceptable prominent classes to test, or would you prefer others?
+> 3. For the LOSO validation, since training the diffusion model from scratch on every LOSO fold is extremely expensive, I propose we evaluate the *downstream classifier* in a LOSO manner (using synthetic data generated from our *existing* globally trained diffusion model to augment the train split). Is this acceptable, or do we strictly need to train the generative models in a LOSO manner as well?
+> 
+> Once approved, I will begin implementing these new evaluation scripts and executing them to gather the results.

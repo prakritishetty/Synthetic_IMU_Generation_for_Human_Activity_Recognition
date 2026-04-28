@@ -56,6 +56,8 @@ def main():
     parser.add_argument("--device", type=str,
                         default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--wandb", action="store_true", help="Enable WandB logging")
+    parser.add_argument("--cfg_drop_prob", type=float, default=0.1, 
+                        help="Probability of dropping class condition for Classifier-Free Guidance")
     args = parser.parse_args()
 
     if args.wandb:
@@ -79,8 +81,9 @@ def main():
                             num_workers=0, pin_memory=(args.device == "cuda"))
 
     # Build models
+    # We add +1 to num_classes for the "null" class used in Classifier-Free Guidance
     diffusion_model = TokenTransformerDiffusion(
-        seq_len=L, token_dim=64, num_classes=num_classes
+        seq_len=L, token_dim=64, num_classes=num_classes + 1
     ).to(args.device)
     decoder_model = IMUDecoder(token_dim=64, patch_dim=patch_dim).to(args.device)
 
@@ -132,7 +135,12 @@ def main():
             a_cp = alphas_cumprod[t].view(-1, 1, 1)
             noisy_tokens = torch.sqrt(a_cp) * b_tokens + torch.sqrt(1 - a_cp) * noise
 
-            pred_noise = diffusion_model(noisy_tokens, t, b_labels, b_masks)
+            # Classifier-Free Guidance: randomly drop the class label
+            drop_mask = torch.rand(b_tokens.shape[0], device=args.device) < args.cfg_drop_prob
+            cfg_labels = b_labels.clone()
+            cfg_labels[drop_mask] = num_classes  # null class index
+
+            pred_noise = diffusion_model(noisy_tokens, t, cfg_labels, b_masks)
             diff_loss = nn.functional.mse_loss(pred_noise[b_masks], noise[b_masks])
 
             diff_opt.zero_grad()

@@ -154,3 +154,43 @@ class IMUDecoder(nn.Module):
 
     def forward(self, tokens):
         return self.net(tokens)
+
+class WaveformDecoder(nn.Module):
+    """
+    Decodes the (N, L, 64) BioPM tokens directly back into the 
+    raw physical (N, T, 3) acceleration windows.
+    Since L=192 and T=300 (for 10s @ 30Hz), we use a 1D CNN with 
+    temporal interpolation.
+    """
+    def __init__(self, token_dim=64, hidden_dim=128, out_channels=3, target_length=300):
+        super().__init__()
+        self.target_length = target_length
+        
+        self.conv1 = nn.Sequential(
+            nn.Conv1d(token_dim, hidden_dim, kernel_size=3, padding=1),
+            nn.GroupNorm(8, hidden_dim),
+            nn.GELU()
+        )
+        
+        self.conv2 = nn.Sequential(
+            nn.Conv1d(hidden_dim, hidden_dim, kernel_size=3, padding=1),
+            nn.GroupNorm(8, hidden_dim),
+            nn.GELU()
+        )
+        
+        self.out_conv = nn.Conv1d(hidden_dim, out_channels, kernel_size=3, padding=1)
+
+    def forward(self, tokens):
+        # tokens: (B, L, 64)
+        x = tokens.transpose(1, 2)  # (B, 64, L)
+        
+        x = self.conv1(x)
+        
+        # Interpolate sequence length from L (192) to target_length (300)
+        x = torch.nn.functional.interpolate(x, size=self.target_length, mode='linear', align_corners=False)
+        
+        x = self.conv2(x)
+        x = self.out_conv(x)  # (B, 3, target_length)
+        
+        return x.transpose(1, 2)  # (B, target_length, 3)
+
