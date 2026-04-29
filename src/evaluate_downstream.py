@@ -14,11 +14,14 @@ from models_diffusion import TokenTransformerDiffusion, IMUDecoder
 # ---------------------------------------------------------------------------
 # Correct DDPM reverse-process sampler
 # ---------------------------------------------------------------------------
-def get_ddpm_schedule(timesteps=1000, beta_start=1e-4, beta_end=0.02):
-    betas = torch.linspace(beta_start, beta_end, timesteps)
-    alphas = 1.0 - betas
-    alphas_cumprod = torch.cumprod(alphas, dim=0)
-    return betas, alphas_cumprod
+def get_ddpm_schedule(timesteps=1000, s=0.008):
+    import math
+    steps = timesteps + 1
+    x = torch.linspace(0, timesteps, steps)
+    alphas_cumprod = torch.cos(((x / timesteps) + s) / (1 + s) * math.pi * 0.5) ** 2
+    alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
+    betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
+    return torch.clip(betas, 0.0001, 0.999), alphas_cumprod[1:]
 
 
 def sample_diffusion(diffusion_model, shape, classes, device, timesteps=1000, w=1.5, num_classes=6):

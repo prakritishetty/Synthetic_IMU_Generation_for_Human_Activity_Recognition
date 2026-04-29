@@ -42,6 +42,7 @@ def main():
     # ME patches (L, 32) for decoder training, and physical windows (T, 3) for waveform plots
     all_raw_patches, all_pos_info, all_raw_windows = [], [], []
 
+    N = len(X)
     print("Extracting full sequence tokens...")
     with torch.no_grad():
         for i in range(0, N, args.batch_size):
@@ -51,14 +52,15 @@ def main():
             X_batch = torch.from_numpy(X[i:end_idx]).float().to(args.device)
             pos_batch = torch.from_numpy(pos_info[i:end_idx]).float().to(args.device)
             add_batch = torch.from_numpy(add_emb[i:end_idx]).float().to(args.device)
-
-            # Padding mask: boolean tensor telling us which patches are valid
-            # padding_mask = ~torch.isnan(my_X).any(dim=-1)
+            Y_batch = labels[i:end_idx]
+            PID_batch = pids[i:end_idx]
+            raw_batch = raw_acc[i:end_idx]
+            bs = X_batch.shape[0]
 
             # No mask modeling logic here, just forward.
-            mask = torch.zeros(bs, my_X.shape[1], device=args.device)
-            acc_tokens = model.encoder_acc(my_X, my_pos, mask, my_add)
-            input_mask = ~torch.isnan(my_X).any(dim=-1)
+            mask = torch.zeros(bs, X_batch.shape[1], device=args.device)
+            acc_tokens = model.encoder_acc(X_batch, pos_batch, mask, add_batch)
+            input_mask = ~torch.isnan(X_batch).any(dim=-1)
             token_mask = torch.nn.functional.interpolate(
                 input_mask.unsqueeze(1).float(), 
                 size=acc_tokens.shape[1], 
@@ -67,11 +69,11 @@ def main():
 
             all_tokens.append(acc_tokens.cpu().numpy())
             all_masks.append(token_mask.cpu().numpy())
-            all_labels.append(my_Y.numpy())
-            all_pids.append(my_PID.numpy())
-            all_raw_patches.append(my_X.cpu().numpy())
-            all_pos_info.append(my_pos.cpu().numpy())
-            all_raw_windows.append(raw_batch.numpy())  # physical (bs, T, 3) windows
+            all_labels.append(Y_batch)
+            all_pids.append(PID_batch)
+            all_raw_patches.append(X_batch.cpu().numpy())
+            all_pos_info.append(pos_batch.cpu().numpy())
+            all_raw_windows.append(raw_batch)  # physical (bs, T, 3) windows
 
     tokens = np.concatenate(all_tokens, axis=0)
     masks = np.concatenate(all_masks, axis=0)
@@ -92,8 +94,8 @@ def main():
     
     print("=" * 60)
     print(f"Extraction complete! Saved to {args.output}")
-    print(f"  Tokens shape:    {all_tokens.shape}")
-    print(f"  Pad Masks shape: {pad_masks.shape}")
+    print(f"  Tokens shape:    {tokens.shape}")
+    print(f"  Pad Masks shape: {masks.shape}")
 
 if __name__ == "__main__":
     main()

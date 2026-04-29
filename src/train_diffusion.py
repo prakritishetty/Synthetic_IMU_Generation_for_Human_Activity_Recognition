@@ -8,7 +8,7 @@ import torch.optim as optim
 from torch.utils.data import TensorDataset, DataLoader
 from tqdm import tqdm
 
-from models_diffusion import TokenTransformerDiffusion, IMUDecoder
+from models_diffusion import TokenTransformerDiffusion
 
 
 # ---------------------------------------------------------------------------
@@ -37,21 +37,23 @@ class EMA:
         return self.shadow.state_dict()
 
 
-def get_ddpm_schedule(timesteps=1000, beta_start=1e-4, beta_end=0.02):
-    betas = torch.linspace(beta_start, beta_end, timesteps)
-    alphas = 1.0 - betas
-    return betas, torch.cumprod(alphas, dim=0)
+def get_ddpm_schedule(timesteps=1000, s=0.008):
+    import math
+    steps = timesteps + 1
+    x = torch.linspace(0, timesteps, steps)
+    alphas_cumprod = torch.cos(((x / timesteps) + s) / (1 + s) * math.pi * 0.5) ** 2
+    alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
+    betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
+    return torch.clip(betas, 0.0001, 0.999), alphas_cumprod[1:]
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", type=str, default="features/biopm_tokens.npz")
     parser.add_argument("--epochs", type=int, default=300)
-    parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--diff_lr", type=float, default=2e-4,
                         help="Learning rate for the diffusion transformer")
-    parser.add_argument("--dec_lr", type=float, default=1e-3,
-                        help="Learning rate for the IMU decoder")
     parser.add_argument("--ema_decay", type=float, default=0.9999)
     parser.add_argument("--device", type=str,
                         default="cuda" if torch.cuda.is_available() else "cpu")
@@ -85,13 +87,10 @@ def main():
     diffusion_model = TokenTransformerDiffusion(
         seq_len=L, token_dim=64, num_classes=num_classes + 1
     ).to(args.device)
-    decoder_model = IMUDecoder(token_dim=64, patch_dim=patch_dim).to(args.device)
 
-    # Separate optimizers: the decoder uses a higher LR (regression task)
-    # the diffusion transformer uses a lower LR (requires precise convergence)
+    # Optimizer
     diff_opt = optim.AdamW(diffusion_model.parameters(),
                            lr=args.diff_lr, weight_decay=1e-4)
-    dec_opt  = optim.Adam(decoder_model.parameters(), lr=args.dec_lr)
 
     # Cosine annealing over the full training run
     diff_scheduler = optim.lr_scheduler.CosineAnnealingLR(
@@ -106,27 +105,17 @@ def main():
     timesteps = len(alphas_cumprod)
 
     print(f"Starting training on {args.device.upper()} for {args.epochs} epochs...")
-    print(f"  diff_lr={args.diff_lr}  dec_lr={args.dec_lr}  EMA decay={args.ema_decay}")
+    print(f"  diff_lr={args.diff_lr}  EMA decay={args.ema_decay}")
 
     for epoch in range(args.epochs):
         diffusion_model.train()
-        decoder_model.train()
-
-        epoch_diff_loss, epoch_dec_loss = 0.0, 0.0
+        epoch_diff_loss = 0.0
 
         pbar = tqdm(dataloader, desc=f"Epoch {epoch+1:03d}/{args.epochs}")
         for b_tokens, b_masks, b_labels, b_raw in pbar:
             b_tokens = b_tokens.to(args.device)
             b_masks  = b_masks.to(args.device)
             b_labels = b_labels.to(args.device)
-            b_raw    = b_raw.to(args.device)
-
-            # ---- IMU Decoder step (independent optimizer) ----
-            pred_raw = decoder_model(b_tokens.detach())  # detach: no grad into diffusion
-            dec_loss = nn.functional.mse_loss(pred_raw[b_masks], b_raw[b_masks])
-            dec_opt.zero_grad()
-            dec_loss.backward()
-            dec_opt.step()
 
             # ---- Diffusion step ----
             t = torch.randint(0, timesteps, (b_tokens.shape[0],),
@@ -152,10 +141,8 @@ def main():
             ema.update(diffusion_model)
 
             epoch_diff_loss += diff_loss.item()
-            epoch_dec_loss  += dec_loss.item()
             pbar.set_postfix({
-                "DiffLoss": f"{diff_loss.item():.4f}",
-                "DecLoss":  f"{dec_loss.item():.4f}",
+                "DiffLoss": f"{diff_loss.item():.4f}"
             })
 
         diff_scheduler.step()
@@ -163,7 +150,6 @@ def main():
         if args.wandb:
             wandb.log({
                 "diffusion_loss":  epoch_diff_loss / len(dataloader),
-                "decoder_loss":    epoch_dec_loss  / len(dataloader),
                 "diff_lr":         diff_scheduler.get_last_lr()[0],
                 "epoch":           epoch + 1,
             })
@@ -172,14 +158,11 @@ def main():
     os.makedirs("checkpoints/diffusion", exist_ok=True)
     torch.save(diffusion_model.state_dict(),
                "checkpoints/diffusion/token_diff.pt")
-    torch.save(decoder_model.state_dict(),
-               "checkpoints/diffusion/imu_decoder.pt")
     torch.save(ema.state_dict(),
                "checkpoints/diffusion/token_diff_ema.pt")
     print("Training finished! Models saved to checkpoints/diffusion/")
     print("  token_diff.pt     — live model weights")
     print("  token_diff_ema.pt — EMA weights (use these for evaluation)")
-    print("  imu_decoder.pt    — IMU decoder weights")
 
     if args.wandb:
         wandb.finish()
