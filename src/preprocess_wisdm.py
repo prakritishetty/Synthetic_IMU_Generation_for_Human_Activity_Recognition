@@ -8,6 +8,7 @@ Pipeline:
   3. Divide by users and process each user's window independently
   4. Resample 20Hz -> 30Hz
   5. BioPM zero-crossing and windowing
+  6. ADVANCED KINEMATICS: Jerk and Posture injection
 """
 import os
 import sys
@@ -24,7 +25,7 @@ from src.data.preprocessing import (
 )
 
 DEFAULT_CONFIG = {
-    'HighF1': 10,        # Nyquist is 10 for 20Hz. Wait, we resample to 30Hz first.
+    'HighF1': 12,        # Resampled to 30Hz, Nyquist is 15Hz. HighF1 = 12 is perfectly fine.
     'LowF1': 0.5,       
     'Order1': 6,         
     'ori_FS': 20,        # WISDM is 20 Hz
@@ -34,10 +35,6 @@ DEFAULT_CONFIG = {
     'normalize_size_target': 32,  
     'normalize_size_assign': 32,
 }
-
-# Fix Nyquist issue: If we resample to target_FS first, Nyquist is target_FS/2 = 15Hz.
-# So HighF1 = 12 is perfectly fine.
-DEFAULT_CONFIG['HighF1'] = 12
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -68,6 +65,18 @@ def preprocess_one_subject(df_user, user_id, config, output_dir, label_map):
     acc_gravity = lowpass_filter(
         acc_resampled, config['LowF1'], config['target_FS'],
         order=config['Order1'])
+
+    # --- ADVANCED KINEMATICS UPGRADE ---
+    jerk = np.zeros_like(acc_gravity)
+    jerk[1:] = (acc_gravity[1:] - acc_gravity[:-1]) * config['target_FS']
+    
+    pitch = np.arctan2(acc_gravity[:, 0], np.sqrt(acc_gravity[:, 1]**2 + acc_gravity[:, 2]**2)) * 180 / np.pi
+    roll = np.arctan2(acc_gravity[:, 1], np.sqrt(acc_gravity[:, 0]**2 + acc_gravity[:, 2]**2)) * 180 / np.pi
+    posture = np.column_stack((pitch, roll, np.zeros(len(pitch))))
+    
+    # Overwrite w_grav with the enhanced physics array before sliding windows
+    acc_gravity = acc_gravity + (jerk * 0.1) + (posture * 0.01) 
+    # -----------------------------------
 
     ws = int(config['WS'] * config['target_FS'])
     step = int(config['SlideSize'] * config['target_FS'])
