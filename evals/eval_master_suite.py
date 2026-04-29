@@ -83,6 +83,8 @@ def eval_physical_sanity(real_waveforms, syn_waveforms, real_y, syn_y, out_dir, 
         plt.hist(rw.flatten(), bins=50, alpha=0.5, density=True, label='Real Amplitude', color='blue')
         plt.hist(sw.flatten(), bins=50, alpha=0.5, density=True, label='Synthetic Amplitude', color='red')
         plt.title(f"Amplitude Distribution: {WISDM_LABELS[cls]}")
+        plt.xlabel("Amplitude (g)")
+        plt.ylabel("Density")
         plt.legend()
         plot_path = f"{out_dir}/physical_sanity/amp_dist_class_{cls}.png"
         plt.savefig(plot_path)
@@ -117,6 +119,8 @@ def eval_distributional_shifts(real_feats, syn_feats, out_dir, use_wandb=False):
     plt.scatter(X_pca[:N_real, 0], X_pca[:N_real, 1], alpha=0.4, label='Real', color='blue', s=10)
     plt.scatter(X_pca[N_real:, 0], X_pca[N_real:, 1], alpha=0.6, label='Synthetic', color='red', s=15)
     plt.title("PCA Manifold: Real vs Synthetic")
+    plt.xlabel("Principal Component 1")
+    plt.ylabel("Principal Component 2")
     plt.legend()
     plot_path = f"{out_dir}/distribution/pca_manifold.png"
     plt.savefig(plot_path)
@@ -124,6 +128,26 @@ def eval_distributional_shifts(real_feats, syn_feats, out_dir, use_wandb=False):
 
     if use_wandb:
         wandb.log({"Eval/Distribution/PCA_Manifold": wandb.Image(plot_path)})
+        
+    print("Computing t-SNE projection (this may take a moment)...")
+    expected_obs("Distributional Shifts (t-SNE)", "The t-SNE plot should show distinct clusters representing the conditional classes, with Real (blue) and Synthetic (red) points mixed together within each class island.")
+    from sklearn.manifold import TSNE
+    tsne = TSNE(n_components=2, perplexity=30, random_state=42)
+    X_tsne = tsne.fit_transform(X_comb)
+    
+    plt.figure(figsize=(8, 6))
+    plt.scatter(X_tsne[:N_real, 0], X_tsne[:N_real, 1], alpha=0.4, label='Real', color='blue', s=10)
+    plt.scatter(X_tsne[N_real:, 0], X_tsne[N_real:, 1], alpha=0.6, label='Synthetic', color='red', s=15)
+    plt.title("t-SNE Manifold: Real vs Synthetic")
+    plt.xlabel("t-SNE Dimension 1")
+    plt.ylabel("t-SNE Dimension 2")
+    plt.legend()
+    tsne_plot_path = f"{out_dir}/distribution/tsne_manifold.png"
+    plt.savefig(tsne_plot_path)
+    plt.close()
+    
+    if use_wandb:
+        wandb.log({"Eval/Distribution/tSNE_Manifold": wandb.Image(tsne_plot_path)})
 
 def plot_comparative_waveforms(real_waveforms, syn_waveforms, real_y, syn_y, out_dir, use_wandb=False):
     import wandb
@@ -158,7 +182,7 @@ def plot_comparative_waveforms(real_waveforms, syn_waveforms, real_y, syn_y, out
         if use_wandb:
             wandb.log({f"Eval/Waveforms/Class_{cls}": wandb.Image(plot_path)})
 
-def eval_class_imbalance_repair(real_feats, real_y, model, L, num_classes, args, out_dir, use_wandb=False):
+def eval_class_imbalance_repair(real_feats, real_y, model, L, num_classes, args, out_dir, scaler=None, use_wandb=False):
     import wandb
     from sklearn.model_selection import train_test_split
     from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
@@ -187,6 +211,13 @@ def eval_class_imbalance_repair(real_feats, real_y, model, L, num_classes, args,
     print(f"Generating {gen_n} synthetic samples to repair starved Class {rare_class}...")
     gen_c = torch.full((gen_n,), rare_class, device=args.device, dtype=torch.long)
     syn_tokens = sample_diffusion(model, (gen_n, L, 64), gen_c, args.device, w=args.cfg_weight, num_classes=num_classes)
+    
+    # Denormalize
+    if scaler is not None:
+        mean = scaler["mean"].to(args.device)
+        std = scaler["std"].to(args.device)
+        syn_tokens = syn_tokens * std + mean
+        
     syn_rare = syn_tokens.cpu().numpy().mean(axis=1)
         
     X_train_repaired = np.concatenate([X_train, syn_rare])
@@ -256,12 +287,27 @@ def main():
     decoder = WaveformDecoder(token_dim=64, hidden_dim=256, out_channels=3, target_length=real_raw_windows.shape[1]).to(args.device)
     decoder.load_state_dict(torch.load(args.dec_ckpt, map_location=args.device, weights_only=True))
     
+    # Load Scaler
+    scaler_path = os.path.join(os.path.dirname(args.diff_ckpt), "token_scaler.pt")
+    if os.path.exists(scaler_path):
+        print("Loading token scaler for denormalization...")
+        scaler = torch.load(scaler_path, map_location=args.device, weights_only=True)
+    else:
+        print("WARNING: token_scaler.pt not found! Synthetics will remain unnormalized.")
+        scaler = None
+
     print("Generating Synthetic Data with CFG...")
     gen_n = 500
     gen_c = torch.randint(0, num_classes, (gen_n,), device=args.device)
     
     # CFG generation
     syn_tokens = sample_diffusion(model, (gen_n, L, 64), gen_c, args.device, w=args.cfg_weight, num_classes=num_classes)
+    
+    # Denormalize
+    if scaler is not None:
+        mean = scaler["mean"].to(args.device)
+        std = scaler["std"].to(args.device)
+        syn_tokens = syn_tokens * std + mean
     
     with torch.no_grad():
         syn_waveforms = decoder(syn_tokens).cpu().numpy()
@@ -278,7 +324,7 @@ def main():
     eval_physical_sanity(real_raw_windows, syn_waveforms, real_labels, syn_labels_np, args.out_dir, args.wandb)
     eval_distributional_shifts(real_features, syn_features, args.out_dir, args.wandb)
     plot_comparative_waveforms(real_raw_windows, syn_waveforms, real_labels, syn_labels_np, args.out_dir, args.wandb)
-    eval_class_imbalance_repair(real_features, real_labels, model, L, num_classes, args, args.out_dir, args.wandb)
+    eval_class_imbalance_repair(real_features, real_labels, model, L, num_classes, args, args.out_dir, scaler, args.wandb)
     print("--- Evaluations Complete ---")
 
     if args.wandb:

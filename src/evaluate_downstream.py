@@ -55,19 +55,25 @@ def sample_diffusion(diffusion_model, shape, classes, device, timesteps=1000, w=
             # Extrapolate away from unconditional prediction
             pred_noise = pred_uncond + w * (pred_cond - pred_uncond)
 
-            # Standard DDPM reverse step
-            beta_t    = betas[i]
-            alpha_t   = alphas[i]
-            alpha_bar = alphas_cumprod[i]
-
-            x_mean = (1.0 / torch.sqrt(alpha_t)) * (
-                x - (beta_t / torch.sqrt(1.0 - alpha_bar)) * pred_noise
-            )
-
-            if i > 0:
-                x = x_mean + torch.sqrt(beta_t) * torch.randn_like(x)
-            else:
-                x = x_mean  # no noise at the final step
+            alpha = (1.0 - betas[i])
+            alpha_cp = alphas_cumprod[i]
+            alpha_cp_prev = alphas_cumprod[i-1] if i > 0 else torch.tensor(1.0, device=device)
+            
+            noise = torch.randn_like(x) if i > 0 else torch.zeros_like(x)
+            
+            # Calculate x0_pred
+            x0_pred = (x - torch.sqrt(1 - alpha_cp) * pred_noise) / torch.sqrt(alpha_cp)
+            
+            # CRITICAL FIX: Clip x0 to prevent exploding variance from Cosine schedule near t=1000
+            # Our normalized tokens are N(0, 1), so values outside [-5, 5] are physically impossible.
+            x0_pred = torch.clamp(x0_pred, min=-5.0, max=5.0)
+            
+            # Posterior mean
+            mean = (torch.sqrt(alpha_cp_prev) * betas[i] * x0_pred + 
+                    torch.sqrt(alpha) * (1 - alpha_cp_prev) * x) / (1 - alpha_cp)
+                    
+            variance = betas[i] * (1 - alpha_cp_prev) / (1 - alpha_cp)
+            x = mean + torch.sqrt(variance) * noise
 
     return x
 
@@ -173,6 +179,15 @@ def main():
     syn_tokens = sample_diffusion(
         diffusion_model, (args.gen_n, L, 64), gen_c, args.device, w=1.5, num_classes=num_classes)
 
+    # Load Scaler
+    scaler_path = os.path.join(os.path.dirname(args.diff_ckpt), "token_scaler.pt")
+    if os.path.exists(scaler_path):
+        print("Loading token scaler for denormalization...")
+        scaler = torch.load(scaler_path, map_location=args.device, weights_only=True)
+        mean = scaler["mean"].to(args.device)
+        std = scaler["std"].to(args.device)
+        syn_tokens = syn_tokens * std + mean
+        
     # 2. Decode to normalised ME patches
     with torch.no_grad():
         syn_patches_all = decoder_model(syn_tokens)  # (gen_n, L, 32)

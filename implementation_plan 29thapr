@@ -1,0 +1,38 @@
+# Analysis & Fix Plan: The Token Normalization Bug
+
+You asked some excellent questions. The fact that the diffusion loss converged beautifully to `0.08` but generated pure random noise (the scattered PCA plot) is the smoking gun we needed. 
+
+## 1. Why Did it Generate Uniform Noise?
+**The Diagnosis:** We failed to normalize the 64-dimensional BioPM tokens before feeding them into the diffusion model. 
+
+Diffusion models mathematically **assume** that the data you are training on has a mean of `0` and a standard deviation of `1`. This is because the noise we add during training is Standard Normal $\mathcal{N}(0, 1)$. 
+If your raw BioPM tokens have a massive arbitrary scale (e.g., standard deviation of 15.0), adding standard normal noise does absolutely nothing to corrupt the signal. The model never actually learns to denoise; it just learns to ignore the noise. 
+When we sample during evaluation, we start with pure $\mathcal{N}(0, 1)$ noise. Because the model never learned to denoise, it just spits that pure noise back out. This perfectly explains why the PCA plot shows a massive, uniform cloud of randomness, and why the Synthetic F1 crashed to 0.22.
+
+## 2. Linear vs Cosine Schedule
+You asked if we should revert to the linear schedule since it converged faster previously. 
+**Answer:** No. The fast convergence you saw previously was likely a false positive (the model just memorizing the mean because the signal-to-noise ratio was broken). The Cosine schedule was specifically invented by OpenAI (in the "Improved DDPM" paper) because linear schedules destroy continuous data too quickly in the forward process. We absolutely want to keep the Cosine schedule, we just need to fix the data it's training on!
+
+---
+
+## 3. Proposed Fixes (Next Steps)
+
+To rescue the pipeline, we need to implement a global scaler for the tokens.
+
+### Step 1: Normalize Tokens during Diffusion Training
+- I will modify `src/train_diffusion.py` to calculate the global `mean` and `std` of the continuous tokens.
+- It will normalize the dataset to $\mathcal{N}(0, 1)$ before training starts.
+- It will save these exact statistics to disk as `checkpoints/diffusion/token_scaler.pt` so we can reverse the process later.
+
+### Step 2: Denormalize Tokens during Evaluation
+- I will modify `eval_master_suite.py` and `evaluate_classifier.py` to load `token_scaler.pt`.
+- After the diffusion model hallucinates the synthetic tokens (which will now correctly be $\mathcal{N}(0, 1)$), we will multiply by the `std` and add the `mean` to un-normalize them back into the true BioPM latent space.
+- *Only then* will we pass them to the Waveform Decoder and the classifiers.
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Feedback Needed:**
+> Does this explanation make sense? Normalization is the "silent killer" of diffusion models, and it completely explains the random noise generations despite a 700-epoch training run.
+> 
+> If you approve, I will inject the token normalizer into the training and evaluation scripts right now.

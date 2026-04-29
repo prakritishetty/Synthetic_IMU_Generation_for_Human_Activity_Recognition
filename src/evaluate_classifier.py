@@ -49,11 +49,25 @@ def sample_diffusion(diffusion_model, shape, classes, device, timesteps=1000, w=
             pred_noise_double = diffusion_model(x_double, t_double, c_double, mask=m_double)
             pred_cond, pred_uncond = pred_noise_double.chunk(2, dim=0)
             pred_noise = pred_uncond + w * (pred_cond - pred_uncond)
+            alpha = (1.0 - betas[i])
+            alpha_cp = alphas_cumprod[i]
+            alpha_cp_prev = alphas_cumprod[i-1] if i > 0 else torch.tensor(1.0, device=device)
             
-            alpha_t, alpha_t_prev = alphas_cumprod[i], (alphas_cumprod[i-1] if i > 0 else torch.tensor(1.0, device=device))
-            beta_t = 1 - (alpha_t / alpha_t_prev)
-            x_mean = (1 / torch.sqrt(1 - beta_t)) * (x - (beta_t / torch.sqrt(1 - alpha_t)) * pred_noise)
-            x = x_mean + (torch.sqrt(beta_t) * torch.randn_like(x) if i > 0 else 0)
+            noise = torch.randn_like(x) if i > 0 else torch.zeros_like(x)
+            
+            # Calculate x0_pred
+            x0_pred = (x - torch.sqrt(1 - alpha_cp) * pred_noise) / torch.sqrt(alpha_cp)
+            
+            # CRITICAL FIX: Clip x0 to prevent exploding variance from Cosine schedule near t=1000
+            # Our normalized tokens are N(0, 1), so values outside [-5, 5] are physically impossible.
+            x0_pred = torch.clamp(x0_pred, min=-5.0, max=5.0)
+            
+            # Posterior mean
+            mean = (torch.sqrt(alpha_cp_prev) * betas[i] * x0_pred + 
+                    torch.sqrt(alpha) * (1 - alpha_cp_prev) * x) / (1 - alpha_cp)
+                    
+            variance = betas[i] * (1 - alpha_cp_prev) / (1 - alpha_cp)
+            x = mean + torch.sqrt(variance) * noise
     return x
 
 def plot_error_waveform(raw_patch, true_label_str, pred_label_str, save_path):
@@ -117,13 +131,24 @@ def main():
     model = TokenTransformerDiffusion(seq_len=L, token_dim=64, num_classes=num_classes + 1).to(args.device)
     model.load_state_dict(torch.load(args.diff_ckpt, map_location=args.device, weights_only=True))
     
-    gen_n = len(rare_idx) - len(keep_rare) 
-    gen_c = torch.full((gen_n,), rare_class, device=args.device, dtype=torch.long)
-    syn_tokens = sample_diffusion(model, (gen_n, L, 64), gen_c, args.device, w=1.5, num_classes=num_classes)
+    n_generate = len(rare_idx) - len(keep_rare)
+    print(f"Generating {n_generate} synthetic samples for class {rare_class}...")
+    syn_c = torch.full((n_generate,), rare_class, device=args.device, dtype=torch.long)
+    syn_tokens = sample_diffusion(model, (n_generate, L, 64), syn_c, args.device, timesteps=1000)
+    
+    # Load Scaler
+    scaler_path = os.path.join(os.path.dirname(args.diff_ckpt), "token_scaler.pt")
+    if os.path.exists(scaler_path):
+        print("Loading token scaler for denormalization...")
+        scaler = torch.load(scaler_path, map_location=args.device, weights_only=True)
+        mean = scaler["mean"].to(args.device)
+        std = scaler["std"].to(args.device)
+        syn_tokens = syn_tokens * std + mean
+        
     syn_features = syn_tokens.cpu().numpy().mean(axis=1)
     
     X_train_repaired = np.concatenate([X_train, syn_features])
-    y_train_repaired = np.concatenate([y_train, gen_c.cpu().numpy()])
+    y_train_repaired = np.concatenate([y_train, syn_c.cpu().numpy()])
     
     clf_repair = RandomForestClassifier(n_estimators=100, random_state=42)
     clf_repair.fit(X_train_repaired, y_train_repaired)

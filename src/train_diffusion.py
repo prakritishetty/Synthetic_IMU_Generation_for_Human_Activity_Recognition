@@ -78,6 +78,21 @@ def main():
     patch_dim = int(np.prod(raw_patches.shape[2:]))
     raw_patches = raw_patches.view(B, L, -1)
 
+    # Normalization: Diffusion mathematically requires zero-mean unit-variance
+    valid_tokens = tokens[masks]
+    token_mean = valid_tokens.mean(dim=0)
+    token_std = valid_tokens.std(dim=0)
+    
+    # Avoid division by zero for any flat dimensions
+    token_std[token_std < 1e-6] = 1.0
+    
+    # Normalize all tokens (including padded ones, since masks will ignore them anyway)
+    tokens = (tokens - token_mean) / token_std
+    
+    os.makedirs("checkpoints/diffusion", exist_ok=True)
+    torch.save({"mean": token_mean, "std": token_std}, "checkpoints/diffusion/token_scaler.pt")
+    print(f"Saved token_scaler.pt. Data normalized.")
+
     dataset = TensorDataset(tokens, masks, labels, raw_patches)
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True,
                             num_workers=0, pin_memory=(args.device == "cuda"))
