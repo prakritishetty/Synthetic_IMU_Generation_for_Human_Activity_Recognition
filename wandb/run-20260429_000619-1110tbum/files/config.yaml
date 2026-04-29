@@ -1,0 +1,131 @@
+_wandb:
+    value:
+        cli_version: 0.24.2
+        e:
+            uy26i9i8x979udmvvvjkltqe21q19vt3:
+                args:
+                    - --data
+                    - features/biopm_tokens.npz
+                    - --diff_ckpt
+                    - checkpoints/diffusion/token_diff_ema.pt
+                    - --dec_ckpt
+                    - checkpoints/diffusion/waveform_decoder.pt
+                    - --out_dir
+                    - results/
+                    - --wandb
+                codePath: evals/eval_master_suite.py
+                codePathLocal: evals/eval_master_suite.py
+                cpu_count: 32
+                cpu_count_logical: 32
+                cudaVersion: "13.0"
+                disk:
+                    /:
+                        total: "470822744064"
+                        used: "26004586496"
+                email: prakritishetty02@gmail.com
+                executable: /home/psshetty_umass_edu/.conda/envs/latent-lang-diff/bin/python
+                git:
+                    commit: 69cf47b9747853f12252013475b08878ad4b4cc9
+                    remote: https://github.com/prakritishetty/Synthetic_IMU_Generation_for_Human_Activity_Recognition.git
+                gpu: NVIDIA L40S
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Ada
+                      cudaCores: 18176
+                      memoryTotal: "48305799168"
+                      name: NVIDIA L40S
+                      uuid: GPU-f055917e-9ae7-cbfc-6105-ea07931605c3
+                host: gpu027
+                memory:
+                    total: "540516315136"
+                os: Linux-6.8.0-94-generic-x86_64-with-glibc2.17
+                program: evals/eval_master_suite.py
+                python: CPython 3.8.13
+                root: /gypsum/work1/zamani/prakriti/synthetic_imu_baseline
+                slurm:
+                    cluster_name: unity
+                    conf: /var/spool/slurm/slurmd/conf-cache/slurm.conf
+                    cpus_on_node: "1"
+                    gpus: "1"
+                    gpus_on_node: "1"
+                    gtids: "0"
+                    job_account: pi_hzamani_umass_edu
+                    job_cpus_per_node: "1"
+                    job_end_time: "1777430147"
+                    job_gid: "4005"
+                    job_gpus: "1"
+                    job_id: "56432542"
+                    job_name: interactive
+                    job_nodelist: gpu027
+                    job_num_nodes: "1"
+                    job_partition: gpu
+                    job_qos: short
+                    job_start_time: "1777415747"
+                    job_uid: "4005"
+                    job_user: psshetty_umass_edu
+                    jobid: "56432542"
+                    launch_node_ipaddr: 10.100.1.4
+                    localid: "0"
+                    mem_per_node: "51200"
+                    mpi_type: pmi2
+                    nnodes: "1"
+                    nodeid: "0"
+                    nodelist: gpu027
+                    oom_kill_step: "0"
+                    pmi2_proc_mapping: (vector,(0,1,1))
+                    pmi2_srun_port: "11725"
+                    pmi2_step_nodes: gpu027
+                    prio_process: "0"
+                    procid: "0"
+                    pty_port: "11843"
+                    pty_win_col: "122"
+                    pty_win_row: "18"
+                    script_context: prolog_task
+                    srun_comm_host: 10.100.1.4
+                    srun_comm_port: "9609"
+                    step_id: "4294967290"
+                    step_launcher_port: "9609"
+                    step_nodelist: gpu027
+                    step_num_nodes: "1"
+                    step_num_tasks: "1"
+                    step_tasks_per_node: "1"
+                    stepid: "4294967290"
+                    stepmgr: gpu027
+                    submit_dir: /gypsum/work1/zamani/prakriti/synthetic_imu_baseline
+                    submit_host: login4
+                    task_pid: "256750"
+                    tasks_per_node: "1"
+                    topology_addr: .ib-core.tors-r1pac16.gpu027
+                    topology_addr_pattern: switch.switch.switch.node
+                startedAt: "2026-04-29T00:06:19.865120Z"
+                writerId: uy26i9i8x979udmvvvjkltqe21q19vt3
+        m: []
+        python_version: 3.8.13
+        t:
+            "1":
+                - 1
+                - 5
+                - 53
+            "2":
+                - 1
+                - 5
+                - 53
+            "3":
+                - 2
+                - 16
+            "4": 3.8.13
+            "5": 0.24.2
+            "12": 0.24.2
+            "13": linux-x86_64
+data:
+    value: features/biopm_tokens.npz
+dec_ckpt:
+    value: checkpoints/diffusion/waveform_decoder.pt
+device:
+    value: cuda
+diff_ckpt:
+    value: checkpoints/diffusion/token_diff_ema.pt
+out_dir:
+    value: results/
+wandb:
+    value: true

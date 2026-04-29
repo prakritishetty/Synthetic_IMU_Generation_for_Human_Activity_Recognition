@@ -1,0 +1,24 @@
+2026-04-28 23:51:31,542 INFO    MainThread:258020 [wandb_setup.py:_flush():81] Current SDK version is 0.24.2
+2026-04-28 23:51:31,542 INFO    MainThread:258020 [wandb_setup.py:_flush():81] Configure stats pid to 258020
+2026-04-28 23:51:31,542 INFO    MainThread:258020 [wandb_setup.py:_flush():81] Loading settings from environment variables
+2026-04-28 23:51:31,542 INFO    MainThread:258020 [wandb_init.py:setup_run_log_directory():717] Logging user logs to /gypsum/work1/zamani/prakriti/synthetic_imu_baseline/wandb/run-20260428_235131-n4u8b8iw/logs/debug.log
+2026-04-28 23:51:31,542 INFO    MainThread:258020 [wandb_init.py:setup_run_log_directory():718] Logging internal logs to /gypsum/work1/zamani/prakriti/synthetic_imu_baseline/wandb/run-20260428_235131-n4u8b8iw/logs/debug-internal.log
+2026-04-28 23:51:31,542 INFO    MainThread:258020 [wandb_init.py:init():844] calling init triggers
+2026-04-28 23:51:31,542 INFO    MainThread:258020 [wandb_init.py:init():849] wandb.init called with sweep_config: {}
+config: {'data': 'features/biopm_tokens.npz', 'epochs': 400, 'batch_size': 128, 'lr': 0.001, 'smoothness_weight': 0.5, 'device': 'cuda', 'wandb': True, '_wandb': {}}
+2026-04-28 23:51:31,542 INFO    MainThread:258020 [wandb_init.py:init():892] starting backend
+2026-04-28 23:51:31,863 INFO    MainThread:258020 [wandb_init.py:init():895] sending inform_init request
+2026-04-28 23:51:31,892 INFO    MainThread:258020 [wandb_init.py:init():903] backend started and connected
+2026-04-28 23:51:31,938 INFO    MainThread:258020 [wandb_init.py:init():973] updated telemetry
+2026-04-28 23:51:31,955 INFO    MainThread:258020 [wandb_init.py:init():997] communicating run to backend with 90.0 second timeout
+2026-04-28 23:51:32,575 INFO    MainThread:258020 [wandb_init.py:init():1042] starting run threads in backend
+2026-04-28 23:51:33,067 INFO    MainThread:258020 [wandb_run.py:_console_start():2529] atexit reg
+2026-04-28 23:51:33,067 INFO    MainThread:258020 [wandb_run.py:_redirect():2377] redirect: wrap_raw
+2026-04-28 23:51:33,067 INFO    MainThread:258020 [wandb_run.py:_redirect():2446] Wrapping output streams.
+2026-04-28 23:51:33,067 INFO    MainThread:258020 [wandb_run.py:_redirect():2469] Redirects installed.
+2026-04-28 23:51:33,073 INFO    MainThread:258020 [wandb_init.py:init():1082] run started, returning control to user process
+2026-04-28 23:57:29,135 INFO    MainThread:258020 [wandb_run.py:_finish():2295] finishing run balachandradevarangadi-umass-amherst/BioPM-Diffusion-Decoder/n4u8b8iw
+2026-04-28 23:57:29,136 INFO    MainThread:258020 [wandb_run.py:_atexit_cleanup():2494] got exitcode: 0
+2026-04-28 23:57:29,137 INFO    MainThread:258020 [wandb_run.py:_restore():2476] restore
+2026-04-28 23:57:29,137 INFO    MainThread:258020 [wandb_run.py:_restore():2482] restore done
+2026-04-28 23:57:30,009 INFO    MainThread:258020 [wandb_run.py:_footer_sync_info():3871] logging synced files

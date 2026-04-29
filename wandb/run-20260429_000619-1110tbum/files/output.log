@@ -1,0 +1,22 @@
+Loading data...
+Generating Synthetic Data with CFG...
+Reverse Denoising: 100%|██████████████████████████████████████████████████████████████| 1000/1000 [01:26<00:00, 11.62it/s]
+--- Starting Evaluations ---
+
+[Simple Classification] -> Expected Ideal Observation:
+    The classifier trained on Real+Synthetic data should match or slightly exceed the F1-score of the Real Only classifier, proving the synthetic data acts as valid, physically accurate data augmentation.
+
+Real Only F1:       0.9777
+Synthetic Only F1:  0.4953
+Real+Synthetic F1:  0.9781
+
+[Physical Sanity] -> Expected Ideal Observation:
+    The histograms of amplitude distributions between Real and Synthetic data for a given class (e.g., Jogging) should be nearly identical. Additionally, the temporal smoothness (step-to-step L2 distance) should be comparable, meaning synthetic signals aren't jittery.
+
+Class Jogging | Real Smoothness: 0.6785 | Synthetic Smoothness: 0.0345
+Class Sitting | Real Smoothness: 0.0106 | Synthetic Smoothness: 0.0312
+
+[Distributional Shifts (PCA)] -> Expected Ideal Observation:
+    The PCA plot should show the Synthetic (red) cluster completely overlapping the Real (blue) cluster, proving that the synthetic data has safely interpolated within the real data manifold without extrapolating into physically impossible spaces.
+
+--- Evaluations Complete ---

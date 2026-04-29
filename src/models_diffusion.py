@@ -162,7 +162,7 @@ class WaveformDecoder(nn.Module):
     Since L=192 and T=300 (for 10s @ 30Hz), we use a 1D CNN with 
     temporal interpolation.
     """
-    def __init__(self, token_dim=64, hidden_dim=128, out_channels=3, target_length=300):
+    def __init__(self, token_dim=64, hidden_dim=256, out_channels=3, target_length=300):
         super().__init__()
         self.target_length = target_length
         

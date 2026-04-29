@@ -23,11 +23,16 @@ def main():
     parser.add_argument("--epochs", type=int, default=150)
     parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--smoothness_weight", type=float, default=0.5,
+    parser.add_argument("--smoothness_weight", type=float, default=0.005,
                         help="Weight for the temporal smoothness penalty")
     parser.add_argument("--device", type=str,
                         default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--wandb", action="store_true", help="Enable WandB logging")
     args = parser.parse_args()
+
+    if args.wandb:
+        import wandb
+        wandb.init(project="BioPM-Diffusion-Decoder", config=vars(args))
 
     print(f"Loading data from {args.data}...")
     npz = np.load(args.data)
@@ -43,7 +48,7 @@ def main():
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True,
                             num_workers=0, pin_memory=(args.device == "cuda"))
 
-    model = WaveformDecoder(token_dim=64, hidden_dim=128, out_channels=3, target_length=T).to(args.device)
+    model = WaveformDecoder(token_dim=64, hidden_dim=256, out_channels=3, target_length=T).to(args.device)
     optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
     
@@ -86,10 +91,22 @@ def main():
 
         scheduler.step()
 
+        if args.wandb:
+            wandb.log({
+                "mse_loss": epoch_mse / len(dataloader),
+                "smoothness_loss": epoch_smooth / len(dataloader),
+                "total_loss": (epoch_mse + args.smoothness_weight * epoch_smooth) / len(dataloader),
+                "lr": scheduler.get_last_lr()[0],
+                "epoch": epoch + 1
+            })
+
     os.makedirs("checkpoints/diffusion", exist_ok=True)
     save_path = "checkpoints/diffusion/waveform_decoder.pt"
     torch.save(model.state_dict(), save_path)
     print(f"Training finished! Model saved to {save_path}")
+
+    if args.wandb:
+        wandb.finish()
 
 if __name__ == "__main__":
     main()
